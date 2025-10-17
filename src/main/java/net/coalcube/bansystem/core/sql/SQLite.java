@@ -25,11 +25,24 @@ public class SQLite implements Database {
     @Override
     public void connect() throws SQLException {
         try {
+            if (con != null && !con.isClosed()) {
+                return;
+            }
+
             Class.forName("org.sqlite.JDBC");
             con = DriverManager.getConnection("jdbc:sqlite:" + database.getPath());
+
+            if (!con.isValid(5)) {
+                throw new SQLException("Konnte keine Verbindung zur SQLite-Datenbank erkennen.");
+            }
+
         } catch (ClassNotFoundException e) {
-            System.err.println("Fehler beim Laden des JDBC-Treibers");
-            e.printStackTrace();
+            System.err.println("JDBC-Treiber nicht gefunden: " + e.getMessage());
+            throw new SQLException("Fehler beim Laden des JDBC-Treibers", e);
+        } catch (SQLException e) {
+            System.err.println("Fehler bei der Verbindung zur SQLite-Datenbank");
+            con = null;
+            throw e;
         }
 
     }
@@ -42,15 +55,31 @@ public class SQLite implements Database {
 
     @Override
     public void update(String qry) throws SQLException {
+        connect();
         PreparedStatement preparedStatement = con.prepareStatement(qry);
         preparedStatement.execute();
     }
 
     @Override
     public ResultSet getResult(String qry) throws SQLException {
-        Statement stmt = con.createStatement();
+        final int retries = 3;
+        SQLException lastException = null;
 
-        return stmt.executeQuery(qry);
+        for (int attempt = 0; attempt < retries; attempt++) {
+            try {
+                if (con == null || con.isClosed() || !con.isValid(2)) {
+                    connect();
+                }
+
+                return con.createStatement().executeQuery(qry);
+            } catch (SQLException e) {
+                lastException = e;
+                System.err.println("Anfrage fehlgeschlagen (Versuch " + (attempt + 1) + "): " + e.getMessage());
+                con = null;
+            }
+        }
+
+        throw new SQLException("Anfrage nach " + retries + " fehlgeschlagenen Versuchen abgebrochen", lastException);
     }
 
     @Override
@@ -131,7 +160,11 @@ public class SQLite implements Database {
 
     @Override
     public boolean isConnected() {
-        return (con != null);
+        try {
+            return con != null && !con.isClosed();
+        } catch (SQLException e) {
+            return false;
+        }
     }
 
     @Override
