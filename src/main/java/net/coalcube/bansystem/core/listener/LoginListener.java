@@ -142,7 +142,7 @@ public class LoginListener {
                     metricsAdapter.addCustomChart(new SimplePie("automations", () -> {
                         return "VPN detected";
                     }));
-                    if (config.getBoolean("VPN.autoban.enable")) {
+                    if (config.getBoolean("VPN.autoban.enable") && !user.hasPermission("bansys.bypassvpn")) {
                         try {
                             int id = config.getInt("VPN.autoban.ID");
                             String reason = config.getString("IDs." + id + ".reason");
